@@ -1,0 +1,4 @@
+.stack-work/
+gameoflife.cabal
+*~
+sghci
