@@ -41,26 +41,41 @@ boardBounds = ((1, 1), (width, height))
 -- | Sets up the game window and FRP network connecting up everything.
 runGame :: IO ()
 runGame = start $ do
-  window <- frame [text := "Conway's Game of Life"]
+  window <- frame [ text := "Conway's Game of Life"
+                  , bgcolor := white ]
 
+  -- Create a timer that triggers to update board every 100 ms.
+  t  <- timer window [ interval := 100 ]
+
+  -- Pause Button
+  pauseButton <- button window [size := sz 40 40]
+  
   -- Create our 2D Checkbox list based on width*height. 
   checks <- replicateM height $
     replicateM width $ checkBox window [text := "  "]
-
+  
+  -- Place our checkboxes in our window.
+  set window [layout := column 5 [ grid 1 1 $ (fmap . fmap) widget checks
+                                 , widget pauseButton]]
+  
   -- Convert our checkboxes into an indexable array to match the board.
   let checkLookup = listArray boardBounds (concat checks)
 
-  -- Create a timer that triggers to update board every 2000 ms.
-  t  <- timer window [ interval := 2000 ]
-
-  -- Place our checkboxes in our window.
-  set window [layout := grid 1 1 $ (fmap . fmap) widget checks ]
-
   let networkDescription :: MomentIO ()
       networkDescription = mdo
+        
+        -- Grab pause event button presses
+        ePause <- event0 pauseButton command
+        -- Turn into a time-dependent alternating bool when pressed.
+        pauseSwitch <- accumB False (not <$ ePause)
+        -- Timer enabled is dictated by event trigger.
+        sink t [ enabled :== pauseSwitch]
+        -- As is text of pause button itself.
+        sink pauseButton [ text :== fmap (\b ->
+          if b then "Pause" else "Resume") pauseSwitch]
+
         etick  <- event0 t command -- Convert WX time event into FRP event.
         ev <- events checkLookup   -- Collect our trigger events.
-        
         -- Create a brand new stream based on initial configuration. 
         -- Is a combination of time and checkbox click events.
         eState <- accumB newBoard $ unions [ev, nextIteration <$ etick]
